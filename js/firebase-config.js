@@ -1,13 +1,8 @@
-// ============================================================
-//  إعدادات Firebase لموقع حلقات أبي هريرة
-//  انسخ القيم من: Firebase Console ← Project settings ← Your apps ← Web app
-//  والصقها مكان القيم أدناه (الشرح الكامل في ملف README.md)
-// ============================================================
 export const firebaseConfig = {
-  apiKey: "ضع_هنا",
-  authDomain: "ضع_هنا.firebaseapp.com",
-  projectId: "ضع_هنا",
-  storageBucket: "ضع_هنا.appspot.com",
-  messagingSenderId: "ضع_هنا",
-  appId: "ضع_هنا"
+  apiKey: "AIzaSyDmqX8_OcPhO3-wH52-1LS8UTRDkDKFD7o",
+  authDomain: "abu-hurairah-745d8.firebaseapp.com",
+  projectId: "abu-hurairah-745d8",
+  storageBucket: "abu-hurairah-745d8.firebasestorage.app",
+  messagingSenderId: "546414496529",
+  appId: "1:546414496529:web:a9c259f420b384afb31ab0"
 };
