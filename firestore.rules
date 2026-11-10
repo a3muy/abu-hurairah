@@ -1,0 +1,102 @@
+rules_version = '2';
+// =====================================================================
+//  قواعد الأمان لموقع حلقات أبي هريرة
+//  الصقها كاملة في: Firebase Console ← Firestore Database ← Rules ← Publish
+// =====================================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function supDoc() { return /databases/$(database)/documents/supervisors/$(request.auth.uid); }
+    function stuDoc() { return /databases/$(database)/documents/students/$(request.auth.uid); }
+    function setupDoc() { return /databases/$(database)/documents/meta/setup; }
+    // مشرف مفعّل
+    function sup() { return signedIn() && exists(supDoc()) && get(supDoc()).data.active == true; }
+    // مشرف رئيسي
+    function mainSup() { return sup() && get(supDoc()).data.role == 'main'; }
+    // طالب مفعّل
+    function stu() { return signedIn() && exists(stuDoc()) && get(stuDoc()).data.active == true; }
+    function member() { return sup() || stu(); }
+    function onlyChanged(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+
+    // الإعداد الأول: يُنشأ مرة واحدة فقط مع أول مشرف رئيسي
+    match /meta/setup {
+      allow get: if true;
+      allow create: if signedIn() && !exists(setupDoc()) && request.resource.data.by == request.auth.uid;
+    }
+
+    match /supervisors/{uid} {
+      allow read: if member() || (signedIn() && request.auth.uid == uid);
+      allow create: if mainSup()
+        || (signedIn() && request.auth.uid == uid && !exists(setupDoc()) && existsAfter(setupDoc())
+            && request.resource.data.role == 'main' && request.resource.data.active == true);
+      allow update, delete: if mainSup();
+    }
+
+    match /students/{uid} {
+      allow read: if member() || (signedIn() && request.auth.uid == uid);
+      allow create, update, delete: if sup();
+
+      // بيانات خاصة (رقم الهوية والبريد) للمشرفين فقط
+      match /private/{doc} {
+        allow read, write: if sup();
+      }
+    }
+
+    // ربط اسم المستخدم ورقم الهوية بحساب الدخول (يُقرأ عند تسجيل الدخول فقط)
+    match /logins/{key} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if sup();
+    }
+
+    match /records/{id} {
+      allow read: if member();
+      allow create, delete: if sup();
+      allow update: if sup()
+        || (stu() && resource.data.sid == request.auth.uid && onlyChanged(['reps', 'done'])
+            && request.resource.data.reps is int
+            && request.resource.data.reps >= 0 && request.resource.data.reps <= resource.data.need
+            && request.resource.data.done == (request.resource.data.reps >= resource.data.need));
+    }
+
+    match /attendance/{id} {
+      allow read: if member();
+      allow write: if sup();
+    }
+
+    match /messages/{id} {
+      allow read, update, delete: if sup();
+      allow create: if stu() && request.resource.data.sid == request.auth.uid
+        && request.resource.data.read == false;
+    }
+
+    match /notifications/{id} {
+      allow read: if sup() || (stu() && resource.data.sid == request.auth.uid);
+      allow create, delete: if sup();
+      allow update: if sup() || (stu() && resource.data.sid == request.auth.uid && onlyChanged(['read']));
+    }
+
+    // الحجز الأسري: معرّف المستند هو التاريخ
+    function freeSlot(d) {
+      return !('sid' in d) && !('supId' in d) && !('movedTo' in d) && d.get('holiday', false) != true;
+    }
+    match /bookings/{date} {
+      allow read: if member();
+      allow write: if sup();
+      // الطالب يحجز يومًا فارغًا باسمه
+      allow create: if stu() && request.resource.data.sid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['sid', 'name']);
+      allow update: if stu() && (
+        (freeSlot(resource.data) && request.resource.data.sid == request.auth.uid && onlyChanged(['sid', 'name']))
+        // أو يلغي حجزه هو
+        || (resource.data.get('sid', '') == request.auth.uid && !('sid' in request.resource.data) && onlyChanged(['sid', 'name']))
+      );
+    }
+
+    match /settings/{id} {
+      allow read: if member();
+      allow write: if mainSup();
+    }
+  }
+}
